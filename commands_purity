@@ -1,0 +1,13 @@
+### lddt, tm-score, pfam-consistency per clusters
+
+# align structurally members to representative
+foldseek structurealign /storage/martin/foldseek_cluster/afdb50best /storage/martin/foldseek_cluster/afdb50best ./databases/afdb50best_foldseek_clu_nofrag_nosingletons purity_analysis/database/aln_db -a -e INF --threads 64
+
+# convert align output to tsv
+foldseek convertalis /storage/martin/foldseek_cluster/afdb50best /storage/martin/foldseek_cluster/afdb50best purity_analysis/database/aln_db purity_analysis/aln-query_target_fident_alnlen_mismatch_gapopen_qstart_qend_tstart_tend_evalue_bits_lddt_alntmscore.tsv --format-output query,target,fident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,lddt,alntmscore --threads 128
+
+# lddt
+awk '{ if($(NF-1) != "-NAN"){ sum[$1]+=$(NF-1); cnt[$1]++; } }END{for(key in sum){print key"\t"sum[key]"\t"cnt[key]"\t"sum[key]/cnt[key]}}'  purity_analysis/aln-query_target_fident_alnlen_mismatch_gapopen_qstart_qend_tstart_tend_evalue_bits_lddt_alntmscore.tsv > purity_analysis/lddt-repId_sumLddt_nMem_avgLddt.tsv
+
+# tm-score
+awk '{ if($NF != "-NAN"){ sum[$1]+=$NF; cnt[$1]++; } }END{for(key in sum){print key"\t"sum[key]"\t"cnt[key]"\t"sum[key]/cnt[key]}}' purity_analysis/aln-query_target_fident_alnlen_mismatch_gapopen_qstart_qend_tstart_tend_evalue_bits_lddt_alntmscore.tsv > purity_analysis/tmScore-repId_sumTmScore_nMem_avgTmScore.tsv

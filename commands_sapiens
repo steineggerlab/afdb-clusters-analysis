@@ -1,0 +1,24 @@
+### Homo Sapiens clusters analysis
+
+# pick homo sapiens (9606) proteins
+mmseqs filtertaxseqdb /storage/martin/foldseek_cluster/afdb ./homo_sapiens/afdb_v3_human --taxon-list 9606 --threads 64
+
+# extract homo sapiens containing clusters
+awk 'FNR==1 {fn+=1;} fn==1 {id[$2]=1; next;} fn==2 && $2 in id {rep[$1]=1; next;} fn==3 && $1 in rep {print $0}' ./homo_sapiens/afdb_v3_human.index afdb50best_foldseek_clu_nofrag_nosingletons.tsv afdb50best_foldseek_clu_nofrag_nosingletons.tsv > homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human_index.tsv
+awk 'FNR==1 {fn+=1;} fn==1 {id[$1]=1; next;} fn==2 && $2 in id {rep[$1]=1; next;} fn==3 && $1 in rep {print $0}' ./homo_sapiens/afdb_v3_human.index afdb50best_foldseek_clu_nofrag_nosingletons.tsv afdb50best_foldseek_clu_nofrag_nosingletons.tsv > homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human_index.tsv
+
+# create homo sapiens clusters
+mmseqs tsv2db homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human_index.tsv homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human
+
+# repId-memId tsv file
+mmseqs createtsv /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human.tsv
+
+# LCA
+mmseqs createsubdb ./homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human.index ./lca/afdb50best_foldseek_nofrag_nosingletons_lca ./homo_sapiens/human_containing_lca
+
+# taxonomyreport
+mmseqs taxonomyreport /storage/martin/foldseek_cluster/afdb50best ./homo_sapiens/human_containing_lca ./homo_sapiens/human_containing_lca.report
+
+### GO data set up
+awk '{gsub(";", "")} $1=="AC" { AC=$2} $1=="DR" && $2=="GO" {print AC"\t"$3} ' ../../cluster_analysis_old/pfam_pdb/uniprot_trembl.dat > ./go/accession_GO.tsv
+awk ' !($1 in go) {go[$1] = $2} $1 in go {go[$1]=go[$1]";"$2}  END { for (key in go) print key"\t"go[key]}' ./go/accession_GO.tsv > ./go/accession_GO_semicolon.tsv

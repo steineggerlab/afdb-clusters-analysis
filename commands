@@ -1,0 +1,95 @@
+### Removing fragments
+
+# removing fragments and alter the centroid
+awk 'BEGIN{newclu=""} FNR==NR{f[$2]=1;next} ($1 != rename){newclu="";rename=""} ($1 in f && $2 in f){rename=$1; next} ($1 == rename && !($2 in f) && newclu==""){newclu=$2; print $2"\t"$2; next} ($1 == rename && !($2 in f) && newclu!=""){print newclu"\t"$2; next} !($2 in f){print}' /storage/martin/foldseek_cluster/uniprot_trembl_sprot_fragments.ids /storage/martin/foldseek_cluster/afdb50best_foldseek_clu.tsv > afdb50best_foldseek_clu_nofragments.tsv &
+
+# tsv2db
+foldseek tsv2db afdb50best_foldseek_clu_nofragments.tsv ./databases/afdb50best_foldseek_clu_nofragments --output-dbtype 6
+
+# w/o frag to tsv file
+mmseqs createtsv /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb ./databases/afdb50best_foldseek_clu_nofragments ./databases/afdb50best_foldseek_clu_nofragments.tsv
+
+# count the number w/o frag
+wc -l databases/afdb50best_foldseek_clu_nofragments.index # 15315246
+
+### Removing singletons
+
+# count the number of members
+awk '{id[$1]+=1; next; } END { for (key in id) print key"\t"id[key]}' afdb50best_foldseek_clu_nofragments.tsv > afdb50best_foldseek_clu_nofragments-repIndex_nMem.tsv
+
+# count the number of singletones
+awk '$2==1 {n+=1;} END {print n}' afdb50best_foldseek_clu_nofragments-repIndex_nMem.tsv # 13012338
+
+# find the rep Ids of singleotns
+awk '$2==1 {print $1}' afdb50best_foldseek_clu_nofragments-repIndex_nMem.tsv > singleton_repIndex
+
+# remove singletons
+awk 'FNR==NR {singletons[$1]=1; next;} !($1 in singletons) {print $0}' singleton_repIndex afdb50best_foldseek_clu_nofragments.tsv > afdb50best_foldseek_clu_nofrag_nosingletons.tsv
+
+# create nosingleton db
+foldseek tsv2db afdb50best_foldseek_clu_nofrag_nosingletons.tsv ./databases/afdb50best_foldseek_clu_nofrag_nosingletons --output-dbtype 6
+
+# tsv - repId memId
+mmseqs createtsv /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb ./databases/afdb50best_foldseek_clu_nofrag_nosingletons ./databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv
+
+### Create AFDB clusters database
+
+# pick reps
+awk '!($1 in id) {print $1; id[$1]=1; next;}' databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv  > ./databases/afdb50best_foldseek_clu_nofrag_nosingletons-reps.tsv
+
+# representative sequences db
+foldseek createsubdb databases/afdb50best_foldseek_clu_nofrag_nosingletons-reps.tsv /storage/martin/foldseek_cluster/afdb databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs --id-mode 1
+foldseek createsubdb databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs.index /storage/martin/foldseek_cluster/afdb_ss databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs_ss
+foldseek createsubdb databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs.index /storage/martin/foldseek_cluster/afdb_ca databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs_ca
+
+### Analyze AFDB clusters
+
+# count how many clusters left
+wc -l ./databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs.index # 2302908
+
+# compute LCA
+mmseqs lca /storage/martin/foldseek_cluster/afdb50best databases/afdb50best_foldseek_clu_nofrag_nosingletons lca/afdb50best_foldseek_nofrag_nosingletons_lca --tax-lineage 1
+
+# make lca report
+mmseqs taxonomyreport /storage/martin/foldseek_cluster/afdb50best lca/afdb50best_foldseek_nofrag_nosingletons_lca lca/afdb50best_foldseek_nofrag_nosingletons_lca.report
+
+# create lca tsv
+mmseqs createtsv /storage/martin/foldseek_cluster/afdb lca/afdb50best_foldseek_nofrag_nosingletons_lca ./lca/afdb50best_foldseek_clu_nofragments_nosingleton_lca.tsv
+
+# print the number of clusters conserved to high superkingdoms
+awk -F "\t" 'BEGIN {interest["Bacteria"]=1; interest["Archaea"]=1; interest["cellular organisms"]=1; interest["Eukaryota"]=1;} {gsub(/^\s*/, "", $6)} $6 in interest {print $6"\t"$3}' lca/afdb50best_foldseek_nofrag_nosingletons_lca.report
+# OUTPUT is
+# cellular organisms      529373
+# Bacteria        370762
+# Eukaryota       311226
+# Archaea 11336
+
+# revise Fig 3 A
+
+# align lddt, tm-score values
+
+
+### Summary file
+
+# number of members
+awk '{id[$1]+=1;} END {for (key in id) print key"\t"id[key]}' ./databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > ./summary/repId_nMem.tsv &
+
+# length
+awk 'FNR==NR {id[$1]=$2; next;} $1 in id {print id[$1]"\t"$3-2}' /storage/martin/foldseek_cluster/afdb.lookup /storage/martin/foldseek_cluster/afdb.index > ./summary/entryId_length.tsv &
+
+# avg length
+wk 'FNR==NR {len[$1]=$2; next;} {slen[$1] += len[$2]; n[$1]+=1;} END {for (key in slen) print key"\t"slen[key]/n[key]} ' ./summary/entryId_length.tsv ./databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > ./summary/repId_avgLen.tsv &
+
+# avg plddt
+awk 'FNR==NR {plddt[$1]=$2; next;} {splddt[$1] += plddt[$2]; n[$1]+=1;} END {for (key in splddt) print key"\t"splddt[key]/n[key]} ' ./plddt/entryId_plddt.tsv ./databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > ./summary/repId_avgPlddt.tsv &
+
+# + repLen
+awk 'FNR==NR {nMem[$1]=$0; next;} $1 in nMem {print nMem[$1]"\t"$2}' ./summary/repId_nMem.tsv ./summary/entryId_length.tsv > ./summary/repId_nMem_repLen.tsv &
+# + avgLen
+awk 'FNR==NR {prev[$1]=$0; next;} $1 in prev {print prev[$1]"\t"$2}' ./summary/repId_nMem_repLen.tsv ./summary/repId_avgLen.tsv > ./summary/repId_nMem_repLen_avgLen.tsv &
+# + repPlddt
+awk 'FNR==NR {prev[$1]=$0; next;} $1 in prev {print prev[$1]"\t"$2}' ./summary/repId_nMem_repLen_avgLen.tsv ./plddt/entryId_plddt.tsv > ./summary/repId_nMem_repLen_avgLen_repPlddt.tsv &
+# + avgPlddt
+awk 'FNR==NR {prev[$1]=$0; next;} $1 in prev {print prev[$1]"\t"$2}' ./summary/repId_nMem_repLen_avgLen_repPlddt.tsv ./summary/repId_avgPlddt.tsv > ./summary/repId_nMem_repLen_avgLen_repPlddt_avgPlddt.tsv &
+# + taxId, lineage
+awk -F "\t" 'FNR==NR {prev[$1]=$0; next;} $1 in prev {print prev[$1]"\t"$2"\t"$5}' ./summary/repId_nMem_repLen_avgLen_repPlddt_avgPlddt.tsv lca/afdb50best_foldseek_clu_nofragments_nosingleton_lca.tsv > ./summary/repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv

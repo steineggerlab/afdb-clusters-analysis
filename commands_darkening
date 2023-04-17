@@ -1,0 +1,62 @@
+### Darkening
+
+# mmseqs pfam search
+srun -p compute -w super002 -c 16 -t 2-0 mmseqs search ./databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs ../../cluster_analysis_old/pfam_pdb/pfam darkening/mmseqs_pfam/mmseqs_pfam tmp -e 0.1 --threads 32 -s 7.5 --max-seqs 100000
+
+# convert mmseqs pfam search result to alns
+mmseqs convertalis ./databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs ../../cluster_analysis_old/pfam_pdb/pfam ./darkening/mmseqs_pfam/mmseqs_pfam ./darkening/aln_mmseqs_pfam
+
+# fodlseek pdb search
+srun -p compute -w super001 -c 16 -t 2-0 foldseek search ./databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs ../../cluster_analysis_old/pfam_pdb/pdb ./darkening/foldseek_pdb/foldseek_pdb tmp -e 0.1 --threads 32
+
+# conver foldseek pdb search result to alns
+foldseek convertalis ./databases/afdb50best_foldseek_clu_nofrag_nosingletons_repseqs ../../cluster_analysis_old/pfam_pdb/pdb ./darkening/foldseek_pdb/foldseek_pdb ./darkening/aln_foldseek_pdb
+
+## uniprot&sprot pfam, tigrfam search
+
+# sprot pfam
+awk 'FNR==NR {id[$1]=$2; next;} $2 in id {print $1"\t"$2"\t"id[$2]} ' ../replicate_find_dark_cluster/web_hit/accession_pfam_sprot_long_semi.tsv databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > ./darkening/ftp_pfam_tigrfam/hit_pfam_sprot.tsv &
+# uniprot pfam
+awk 'FNR==NR {id[$1]=$2; next;} $2 in id {print $1"\t"$2"\t"id[$2]} ' ../replicate_find_dark_cluster/web_hit/accession_pfam_uniprot_long_semi.tsv databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > ./darkening/ftp_pfam_tigrfam/hit_pfam_uniprot.tsv &
+# sprot tigrfam
+awk 'FNR==NR {id[$1]=$2; next;} $2 in id {print $1"\t"$2"\t"id[$2]} ' ../replicate_find_dark_cluster/web_hit/accession_tigrfam_sprot_long_semi.tsv databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > ./darkening/ftp_pfam_tigrfam/hit_tigrfam_sprot.tsv &
+# sprot pfam
+awk 'FNR==NR {id[$1]=$2; next;} $2 in id {print $1"\t"$2"\t"id[$2]} ' ../replicate_find_dark_cluster/web_hit/accession_tigrfam_uniprot_long_semi.tsv databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > ./darkening/ftp_pfam_tigrfam/hit_tigrfam_uniprot.tsv &
+
+# integrate all ftp hits
+awk '{id[$1]=1} END { for (key in id) print key}' ./darkening/ftp_pfam_tigrfam/hit_pfam_sprot.tsv ./darkening/ftp_pfam_tigrfam/hit_pfam_uniprot.tsv ./darkening/ftp_pfam_tigrfam/hit_tigrfam_sprot.tsv ./darkening/ftp_pfam_tigrfam/hit_tigrfam_uniprot.tsv > ./darkening/all_ftp_pfam_tigrfam
+
+# find reps w/o pdb hit by foldseek
+awk 'FNR==NR {id[$1]=1; next;} !($1 in id) {print $0}' ./darkening/aln_foldseek_pdb ./databases/afdb50best_foldseek_clu_nofrag_nosingletons-reps.tsv > ./darkening/without_foldseek-pdb
+# residues
+wc -l ./darkening/without_foldseek-pdb # 1135118
+
+# find reps w/o ( * ) & pfam hit by mmseqs
+awk 'FNR==NR {id[$1]=1; next;} !($1 in id) {print $0}' ./darkening/aln_mmseqs_pfam ./darkening/without_foldseek-pdb > ./darkening/without_foldseek-pdb_mmseqs-pfam
+# residues
+wc -l ./darkening/without_foldseek-pdb_mmseqs-pfam # 883788
+
+# find reps w/o ( * ) & pfam and tigrfam by ftp data
+awk 'FNR==NR {id[$1]=1; next;} !($1 in id) {print $0}' ./darkening/all_ftp_pfam_tigrfam ./darkening/without_foldseek-pdb_mmseqs-pfam > ./darkening/without_foldseek-pdb_mmseqs-pfam_ftp-pfam-tigrfram
+# residues
+wc -l ./darkening/without_foldseek-pdb_mmseqs-pfam_ftp-pfam-tigrfram # 711705
+
+### Dark clusters analysis
+
+# pick dark clusters representatives and members
+awk 'FNR==NR {id[$1]=1; next;} $1 in id {print $0}' darkening/without_foldseek-pdb_mmseqs-pfam_ftp-pfam-tigrfram databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > darkening/dark-repId_memId.tsv
+
+# dark clusters summary file
+awk 'FNR==NR {id[$1]=1; next;} $1 in id {print $0}' darkening/without_foldseek-pdb_mmseqs-pfam_ftp-pfam-tigrfram summary/repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv > darkening/dark-repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv
+
+# pick high avgPlddt clusters
+awk '$6 > 90 {print $0}' darkening/dark-repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv > darkening/highAvgPlddt-dark-repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv
+
+# pick highest pLDDT member in each cluster
+awk 'FNR==NR {plddt[$1]=$2; next;} !($1 in id) {id[$1]=$2; highest[$1]=plddt[$2]; next;} ($1 in id) && plddt[$2]>highest[$1] {id[$1]=$2; highest[$1]=plddt[$2];} END {for (key in id) print key"\t"id[key]"\t"highest[key]}' plddt/entryId_plddt.tsv ./darkening/dark-repId_memId.tsv > darkening/dark-repId_highestId_plddt.tsv &
+
+# pick the high plddt members from the clusters >90% avgPlddt
+awk 'FNR==NR && $6 > 90 {id[$1]=1; next;} $1 in id {print "wget https://alphafold.ebi.ac.uk/files/"$2}' ./darkening/dark-repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv darkening/dark-repId_highestId_plddt.tsv | sed -E 's/cif/pdb/' > darkening/enzyme_analysis_pdb_download.sh
+
+# pick the highets plddt members from all clusters
+awk '{print "wget https://alphafold.ebi.ac.uk/files/"$2}' darkening/dark-repId_highestId_plddt.tsv | sed -E 's/cif/pdb/' > darkening/all_dark_clusters_pdb_download.sh

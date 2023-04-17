@@ -1,0 +1,40 @@
+### Generate DB for sharing
+
+# Foldseek cluster
+mmseqs createtsv /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb50best_foldseek_clu afdb50best_foldseek_clu.tsv
+
+# Flag 2 - AFDB clusters
+awk '{print $1"\t"$2"\t2"}' databases/afdb50best_foldseek_clu_nofrag_nosingletons.tsv > share_db/all-repId_memId_cluFlag-2.tsv
+
+# Flag 4 - add singletons
+awk 'FNR==NR {id[$2]=1; print $0;  next;} !($2 in id) {print $1"\t"$2"\t4"}' share_db/all-repId_memId_cluFlag-2.tsv databases/afdb50best_foldseek_clu_nofragments.tsv > share_db/all-repId_memId_cluFlag-24.tsv
+
+# Find fragments repId-memId (repId should be modified)
+awk 'FNR==NR {rep[$2]=$1; next;} !($2 in rep) {print $0}' databases/afdb50best_foldseek_clu_nofragments.tsv afdb50best_foldseek_clu.tsv > ./share_db/fragments-removed_foldseekRepId_memId-2 &
+
+# find other protein if there is any other member in the AFDB clusters
+awk 'FNR==NR {mem2rep[$2]=$1; rep2other[$1]="N/A"; next;} $1 in rep2other && !($2 in mem2rep) {rep2other[$1]=$2;} END {for (key in mem2rep) print mem2rep[key]"\t"key"\t"rep2other[mem2rep[key]]}' ./share_db/fragments-removed_foldseekRepId_memId-2 afdb50best_foldseek_clu.tsv > ./share_db/fragments-other-member_repId_memId_otherId-2 &
+
+# get the altered rep iD. If there is other Id, get the repId from the other Id. If not, the fragment's repId remains the same.
+awk 'FNR==NR {mem2rep[$2]=$1; next;} $3=="N/A" {print $1"\t"$2"\t"$3"\t"$1; next;} $3!="N/A" {print $1"\t"$2"\t"$3"\t"mem2rep[$3]} ' ./databases/afdb50best_foldseek_clu_nofragments.tsv ./share_db/fragments-other-member_repId_memId_otherId-2 > ./share_db/fragments-other-member_repId_memId_otherId_alteredRepId-2 &
+
+# Flag 3 - add fragments
+awk 'FNR==NR {id[$2]=1; print $0; next;} !($2 in id) {print $4"\t"$2"\t3"}' share_db/all-repId_memId_cluFlag-24.tsv ./share_db/fragments-other-member_repId_memId_otherId_alteredRepId-2 > share_db/all-repId_memId_cluFlag-234-2.tsv &
+
+# AFDB50
+mmseqs createtsv /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb50best_clu ./afdb50best_clu_repId_memId.tsv
+
+# Flag 1 - add AFDB50
+awk 'FNR==NR {mem2rep[$2]=$1; print $0; next;} !($2 in mem2rep) {print mem2rep[$1]"\t"$2"\t1"}' share_db/all-repId_memId_cluFlag-234-2.tsv afdb50best_clu_repId_memId.tsv | sort > share_db/all-repId_memId_cluFlag-1234-2.tsv &
+
+# create entry taxonomy
+foldseek addtaxonomy /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb50best_clu ./taxonomy/afdb50best_clu_lineage --tax-lineage 1 && foldseek createtsv /storage/martin/foldseek_cluster/afdb /storage/martin/foldseek_cluster/afdb ./taxonomy/afdb50best_clu_lineage ./taxonomy/afdb50best_clu_lineage.tsv
+
+# a file for the website
+awk 'FNR==NR {mem2tax[$2]=$3; next;} {print $1"\t"$2"\t"$3"\t"mem2tax[$2]}' ./taxonomy/afdb50best_clu_lineage.tsv ./share_db/all-repId_memId_cluFlag-1234-2.tsv > ./share_db/website-all-repId_memId_cluFlag_taxId.tsv &
+
+# Cluster file with non-AFDB-clusters rep Ids (for web)
+awk 'FNR==NR {print $1"\t1\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7"\t"$8; id[$1]=1; next;} !($1 in id) {id[$1]=1; print $1"\t0\t0\t0\t0\t0\t0\t0\tN/A"}' summary/repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv share_db/all-repId_memId_cluFlag-1234-2.tsv > share_db/all-clusters-repId_isAFDBCluster_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv
+
+### Supplements
+awk -F "\t" 'FNR==NR {dark[$1]=1; next;} ($1 in dark) {print $1"\t1\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7; next;} !($1 in darK) {print $1"\t0\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7}' ./darkening/without_foldseek-pdb_mmseqs-pfam_ftp-pfam-tigrfram summary/repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv | sed -E 's/-F1-model_v3.cif//' | sed -E 's/AF-//' > share_db/2-repId_isDark_nMem_repLen_avgLen_repPlddt_avgPlddt_LCAtaxId.tsv
