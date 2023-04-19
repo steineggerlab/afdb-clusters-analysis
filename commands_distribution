@@ -1,0 +1,13 @@
+### Let's generate Fig 1 D - the distribution of dark clusters
+
+# repId_isDark_nMem
+awk 'FNR==NR {dark[$1]=1; next;} {d=0;} $1 in dark {d=1} {print $1"\t"d"\t"$2}' darkening/without_foldseek-pdb_mmseqs-pfam_ftp-pfam-tigrfram summary/repId_nMem_repLen_avgLen_repPlddt_avgPlddt_taxId_lineage.tsv > ./summary/repId_isDark_nMem.tsv
+
+# find AFDB removed, dark, bright numbers
+awk 'FNR==NR && $2==1 {dark[$1]=1; next;} FNR==NR && $2==0 {bright[$1]=1; next;} $1 in dark {nDark+=1; next;} $1 in bright {nBright+=1; next;} {nRemoved+=1; next;} END {print nRemoved"\t"nDark"\t"nBright}' summary/repId_isDark_nMem.tsv share_db/all-repId_memId_cluFlag-1234-2.tsv > summary/AFDB-removed_dark_bright.tsv
+
+# find AFDB clusters dark and bright numbers
+awk '$2==1 {nDark += 1; next;} $2==0 {nBright += 1; next;} END {print "0\t"nDark"\t"nBright}' summary/repId_isDark_nMem.tsv > summary/AFDB-Clusters-removed_dark-bright.tsv
+
+# Draw dark and bright clusters' distribution
+# execution: dark_distribution.ipynb
