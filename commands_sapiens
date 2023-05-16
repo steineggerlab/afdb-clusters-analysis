@@ -20,14 +20,16 @@ mmseqs createsubdb ./homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_co
 mmseqs taxonomyreport /storage/martin/foldseek_cluster/afdb50best ./homo_sapiens/human_containing_lca ./homo_sapiens/human_containing_lca.report
 
 ### GO data set up
-awk '{gsub(";", "")} $1=="AC" { AC=$2} $1=="DR" && $2=="GO" {print AC"\t"$3} ' ../../cluster_analysis_old/pfam_pdb/uniprot_trembl.dat > ./go/accession_GO.tsv
-awk ' !($1 in go) {go[$1] = $2} $1 in go {go[$1]=go[$1]";"$2}  END { for (key in go) print key"\t"go[key]}' ./go/accession_GO.tsv > ./go/accession_GO_semicolon.tsv
+awk '{gsub(";", "")} $1=="AC" { AC=$2} $1=="DR" && $2=="GO" {print AC"\t"$3} ' ../../cluster_analysis_old/pfam_pdb/uniprot_trembl.dat > ./go/trembl_accession_GO.tsv
+awk ' !($1 in go) {go[$1] = $2} $1 in go {go[$1]=go[$1]";"$2}  END { for (key in go) print key"\t"go[key]}' ./go/trembl_accession_GO.tsv > ./go/trembl_accession_GO_semicolon.tsv
+awk '{gsub(";", "")} $1=="AC" { AC=$2} $1=="DR" && $2=="GO" {print AC"\t"$3} ' ../../cluster_analysis_old/pfam_pdb/uniprot_sprot.dat > ./go/sprot_accession_GO.tsv &
+awk 'FNR==NR {print $0; id[$1$2]=1; next} !($1$2 in id) {print $0}' go/sprot_accession_GO.tsv go/trembl_accession_GO.tsv > go/union_accession_GO.tsv
 
 # find homo sapiens AFDB id
 awk 'FNR==NR {id[$1]=1; next;} $1 in id {print $2}' homo_sapiens/afdb_v3_human.index homo_sapiens/afdb_v3_human.lookup > homo_sapiens/afdb_v3_human.ids
 
 # map GO to human proteins
-awk 'FNR==NR {id[$1]=1; next;} "AF-"$1"-F1-model_v3.cif" in id {print "AF-"$1"-F1-model_v3.cif\t"$2}' homo_sapiens/afdb_v3_human.ids go/accession_GO.tsv > homo_sapiens/human-sapId_GO.tsv
+awk 'FNR==NR {id[$1]=1; next;} "AF-"$1"-F1-model_v3.cif" in id {print "AF-"$1"-F1-model_v3.cif\t"$2}' homo_sapiens/afdb_v3_human.ids go/union_accession_GO.tsv > homo_sapiens/human-sapId_GO.tsv
 
 ### pick the higher plddt sapiens protein in each cluster
 # map plddt to homo sapiens AFDB proteins
@@ -40,9 +42,64 @@ awk 'FNR==NR {plddt[$1]=$2; next;} !($1 in id) {id[$1]=$2; highest[$1]=plddt[$2]
 awk 'FNR==NR {id[$2]=$0; next;} $1 in id {print id[$1]"\t"$2}' homo_sapiens/human-repId_highestSapId_plddt.tsv homo_sapiens/human-sapId_GO.tsv > homo_sapiens/human-repId_highestSapId_sapPlddt_GO.tsv
 
 # map lca rank info
-awk -F "\t" 'FNR==NR {rep[$1]=$3; next;} $1 in rep {print $1"\t"rep[$1]"\t"$2"\t"$3"\t"$4}' lca/afdb50best_foldseek_clu_nofragments_nosingleton_lca.tsv homo_sapiens/human-repId_highestSapId_sapPlddt_GO.tsv > homo_sapiens/clu-sap-repId_rank_sapId_sapPlddt_sapGO.tsv
-awk -F "\t" 'FNR==NR {rep[$1]=$4; next;} $1 in rep {print $1"\t"rep[$1]"\t"$2"\t"$3"\t"$4}' lca/afdb50best_foldseek_clu_nofragments_nosingleton_lca.tsv homo_sapiens/human-repId_highestSapId_sapPlddt_GO.tsv > homo_sapiens/clu-sap-repId_rankName_sapId_sapPlddt_sapGO.tsv
+awk -F "\t" 'FNR==NR {rep[$1]=$2"\t"$4; next;} $1 in rep {print $1"\t"rep[$1]"\t"$2"\t"$3"\t"$4}' lca/afdb50best_foldseek_clu_nofragments_nosingleton_lca.tsv homo_sapiens/human-repId_highestSapId_sapPlddt_GO.tsv > homo_sapiens/clu-sap-repId_lcaTaxId_lcaRankName_sapId_sapPlddt_sapGO.tsv
 
 # annotate taxonomy to spaiens cluster members
-awk 'FNR==NR {id[$2]=1; next;} $2 in id {print $0}' homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human.tsv taxonomy/afdb50best_clu_lineage.tsv > homo_sapiens/repId_memId_taxId_rank_rankName_lineage.tsv
+awk -F "\t" 'FNR==NR {mem[$2]=$1; next} $2 in mem {print mem[$2]"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6}' homo_sapiens/afdb50best_foldseek_clu_nofrag_nosingletons_containing_human.tsv ./taxonomy/afdb50best_clu_lineage.tsv > homo_sapiens/repId_memId_taxId_rank_rankName_lieage.tsv
+
+# find out immune related cluster with python (below)
+# by the file - find_immune_related_human_cluster.ipynb
+# the ipynb file returns the output file - homo_sapiens/human-immune-go-repId_sapId_sapGO_lca_sapGOFunc.tsv
+
+# find human immunity clusters that has Bacteria or Archaea in it
+grep cellular homo_sapiens/human-immune-go-repId_sapId_sapGO_lca_sapGOFunc.tsv > homo_sapiens/across-kingdom-human-immune-go-repId_sapId_sapGO_lca_sapGOFunc.tsv
+
+# find the examples in Fig 3
+# A
+
+# find the D2N2J3 cluster from nucleous (GO:0005634) annotated clusters
+grep GO:0005634 homo_sapiens/clu-sap-repId_lcaTaxId_lcaRankName_sapId_sapPlddt_sapGO.tsv
+# output: 
+# ...
+# AF-D2N2J3-F1-model_v3.cif       131567  cellular organisms      AF-A0A2R8Y619-F1-model_v3.cif   84.45   GO:0005634
+# ...
+
+# find the Bacteria protein (A0A1G5ASE0) in the D2N2J3 cluster
+grep AF-D2N2J3 homo_sapiens/repId_memId_taxId_rank_rankName_lieage.tsv | grep Bacteria
+# output:
+# ...
+# AF-D2N2J3-F1-model_v3.cif       AF-A0A1G5ASE0-F1-model_v3.cif   582692  species Paenibacillus polysaccharolyticus       -_cellular organisms;d_Bacteria;-_Terrabacteria group;p_Firmicutes;c_Bacilli;o_Bacillales;f_Paenibacillaceae;g_Paenibacillus;s_Paenibacillus polysaccharolyticus
+# ...
+
+# B
+
+# find the B4DKH6 cluster from the immune related GO annotated clusters
+grep B4DKH6 homo_sapiens/across-kingdom-human-immune-go-repId_sapId_sapGO_lca_sapGOFunc.tsv
+# output:
+# ...
+# AF-A0A401S3L8-F1-model_v3.cif   AF-B4DKH6-F1-model_v3.cif       GO:0006955      cellular organisms      immune response
+# ...
+
+# find the Bacteria protein (A0A2D5ZNG0) in the D2N2J3 cluster
+grep A0A401S3L8 homo_sapiens/repId_memId_taxId_rank_rankName_lieage.tsv | grep Bacteria
+# output:
+# ...
+# AF-A0A401S3L8-F1-model_v3.cif   AF-A0A2D5ZNG0-F1-model_v3.cif   2026742 species Gemmatimonadetes bacterium      -_cellular organisms;d_Bacteria;-_FCB group;p_Gemmatimonadetes;-_unclassified Gemmatimonadetes;s_Gemmatimonadetes bacterium
+# ...
+
+# C
+
+# find the O14862 cluster from the immune related GO annotated clusters
+grep O14862 homo_sapiens/across-kingdom-human-immune-go-repId_sapId_sapGO_lca_sapGOFunc.tsv
+# output:
+# ...
+# AF-A0A286S9Y4-F1-model_v3.cif   AF-O14862-F1-model_v3.cif       GO:0002218      cellular organisms      activation of innate immune response
+# ...
+
+# find the Bacteria protein (A0A1C5UEQ5) in the A0A286S9Y4 cluster
+grep A0A286S9Y4 homo_sapiens/repId_memId_taxId_rank_rankName_lieage.tsv | grep Bacteria
+# output:
+# ...
+# AF-A0A286S9Y4-F1-model_v3.cif   AF-A0A1C5UEQ5-F1-model_v3.cif   59620   species uncultured Clostridium sp.      -_cellular organisms;d_Bacteria;-_Terrabacteria group;p_Firmicutes;c_Clostridia;o_Eubacteriales;f_Clostridiaceae;g_Clostridium;-_environmental samples;s_uncultured Clostridium sp.
+# ...
 
